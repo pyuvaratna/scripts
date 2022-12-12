@@ -1,22 +1,28 @@
 #!/bin/bash
 echo  -e "
 
-
-
-		 **    ** **     ** **      **     **    
-		//**  ** /**    /**/**     /**    ****   
-		 //****  /**    /**/**     /**   **//**  
-		  //**   /**    /**//**    **   **  //** 
-		   /**   /**    /** //**  **   **********
-		   /**   /**    /**  //****   /**//////**
-		   /**   //*******    //**    /**     /**
-		   //     ///////      //     //      //                   
-		     
-		     
-     
+		__     ___    ___      __     
+		\ \   / / |  | \ \    / /\    
+		 \ \_/ /| |  | |\ \  / /  \   
+		  \   / | |  | | \ \/ / /\ \  
+		   | |  | |__| |  \  / ____ \ 
+		   |_|   \____/    \/_/    \_\    1.1.0   
+		     							
+		     		-YUVARATNA PARVATANENI
 "
 # Prompt user for domain input
 read -p "Enter a domain: " domain
+
+# Make the new folder
+mkdir $domain
+cd $domain
+
+# Confirm that the folder was created
+if [ $? -eq 0 ]; then
+  echo "The $domain folder was successfully created."
+else
+  echo "There was an error creating the $folderName folder."
+fi
 
 # Validate the domain name
 if ! [[ $domain =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$ ]]; then
@@ -40,17 +46,66 @@ done
 echo -e "\n\e[32mFinding subdomains for $domain using subfinder...\n\e[0m"
 # Use subfinder to find subdomains for the given domain,
 # then write the output to sub.txt
-subfinder -d "$domain" -all -silent -o sub.txt
+subfinder -max-time 1 -d "$domain" -all -silent -o sub1.txt
+
+# Check the exit code of the previous command
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to find subdomains using subfinder"
+    exit 1
+fi
+
+# Use ANSI escape codes to set the color of the messages
+echo -e "\n\e[32mFinding subdomains for $domain using amass...\n\e[0m"
+# Use amass to find subdomains for the given domain,
+# then write the output to amasssub.txt
+amass enum -passive -d "$domain"  -o sub2.txt
+
+# Check the exit code of the previous command
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to find subdomains using amass"
+    exit 1
+fi
+
+
+# Concatenate the output files into a single file
+cat sub1.txt sub2.txt > subdomains.txt
+
+
+# Print a success message
+echo -e "\n Successfully mixed in subdomains"
+
+
 
 echo -e "\n\e[32mFinding live URLs for the subdomains using httprobe...\n\e[0m"
 # Use httprobe to find live URLs for the subdomains,
 # then write the output to livedomain.txt
-cat sub.txt | httprobe > livedomains.txt
+cat subdomains.txt | httprobe -c 100 > livedomains.txt
+
+# Check the exit code of the previous command
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to find live URLs using httprobe"
+    exit 1
+fi
+
+# Check for unique lines in the output file
+cat livedomains.txt| sort | uniq  | tee -a uniq_livedomains.txt
+
+# Print a success message
+echo -e "\n Successfully checked unique lines in livedomains"
+
+# Delete the input files
+rm sub1.txt sub2.txt
 
 echo -e "\n\e[32mFinding URLs using gau...\n\e[0m"
 # Use gau to find URLs from the wayback machine,
 # then write the output to allUrls.txt
-cat livedomains.txt | gau --subs --blacklist png,jpg,gif,jpeg,swf,woff,gif,svg --o allUrls.txt
+cat livedomains.txt | gau --verbose --subs --blacklist png,jpg,gif,jpeg,swf,woff,gif,svg --o allUrls.txt
+
+# Check the exit code of the previous command
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to find URLs using gau"
+    exit 1
+fi
 
 echo -e "\n\e[32mFinding live URLs using httpx...\n\e[0m"
 # Use httpx to find live URLs from the wayback machine,
